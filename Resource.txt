@@ -1,8 +1,0 @@
-Centos EOL image
-https://cloud.centos.org/centos/
-
-Centos EOL repository
-https://vault.centos.org/
-
-Centos Stream 9 & 10 image and repository
-https://mirror.stream.centos.org/
