@@ -76,11 +76,107 @@
    sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html(/.*)?"; restorecon -R -v /var/www/html; ls -Z /var/www/html
    ```
 
-9.  Make sure the port and directory for displaying the repository packages are correct, such as the nginx configuration.
+9.  Make sure the port and directory for displaying the repository packages are correct, such as the nginx configuration inside `/etc/nginx/nginx.conf`.
+    ```conf
+        server {
+            listen       80 default_server;
+            listen       [::]:80 default_server;
+
+            server_name  _;
+            root         /var/www/html;
+
+            # Load configuration files for the default server block.
+            include /etc/nginx/default.d/*.conf;
+
+            location / {
+                    autoindex on;
+                    autoindex_exact_size off;
+                    autoindex_localtime on;
+            }
+
+            error_page 404 /404.html;
+                location = /40x.html {
+            }
+
+            error_page 500 502 503 504 /50x.html;
+                location = /50x.html {
+            }
+    ```
 
 10. And also check state of nginx service
     ```bash
     systemctl status nginx
     ```
+    > ### Note
+    > Nginx service must active and enabled.
 
-11. 
+11. Create the repository file with the correct path where the DVD or ISO is mounted. But, I will using `/var/www/html` as a local repository root path.
+    > ### Note
+    > Configure on your RHEL 8.4 VM
+    ```repo
+    [baseos]
+    name=BaseOS Packages
+    metadata_expire=-1
+    gpgcheck=1
+    enabled=1
+    baseurl=file:///var/www/html/BaseOS/
+    gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+    
+    [appstream]
+    name=AppStream Packages
+    metadata_expire=-1
+    gpgcheck=1
+    enabled=1
+    baseurl=file:///var/www/html/AppStream/
+    gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+    ```
+
+12. Copy content from RHEL 8.4 DVD ISO directory to `/var/www/html`
+    ```bash
+    cp -avr /mnt/iso/ /var/www/html/
+    ``` 
+
+13. Clear the cache and check whether you are able to get the packages from this DVD repository
+    ```bash
+    dnf clean all; dnf repolist
+
+    # Output
+    Updating Subscription Management repositories.
+    repo id                                      repo name
+    appstream                                    AppStream Packages
+    baseos                                       BaseOS Packages
+    ```
+
+14. Verify with update, download package, or go to local repo site
+    ```bash
+    dnf update; dnf install <package-name>
+    ```
+    ```bash
+    dnf info <package-name>
+
+    # Output
+    --- omitted ---
+
+    From repo    : AppStream
+    
+    --- omitted ---
+    ```
+    ```bash
+    curl -I <server repository ipv4>
+
+    # Output
+    HTTP/1.1 200 OK
+    Server: nginx/1.14.1
+    Date: Sat, 16 May 2026 06:34:34 GMT
+    Content-Type: text/html
+    Connection: keep-alive
+    ```
+    ```bash
+    # Check hit access server repo
+    tail -f /var/log/nginx/access.log
+    ```
+
+# Reference
+- https://access.redhat.com/solutions/6913101
+- https://access.redhat.com/solutions/7019225
+- https://access.redhat.com/solutions/3418871
