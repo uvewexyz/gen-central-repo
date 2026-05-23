@@ -1,7 +1,7 @@
 # Configure Local DVD Repository for RHEL 8.4
 > This method to setup RHEL 8.4 as a server repository to collect some many or spesific packages from Ubuntu 20.04, RHEL 8.4, Centos Stream 9, and Centos Stream 8 repository.
 
-1. I used RHEL 8.4 as a server repository. Firstly, go to [access redhat](https://access.redhat.com/downloads/content/) and select **Red Hat Enterprise Linux 8.4 Binary DVD**
+1. I used RHEL 8.4 as a server repository. Firstly, access [this link](https://archive.org/download/rhel-8.4-x86_64-resources) and select **Red Hat Enterprise Linux 8.4 Binary DVD**
 
 2. Then, create a VM or instance used RHEL 8.4 image. This setup will using graphical console client to display desktop of RHEL 8.4
    > ### Important
@@ -175,6 +175,9 @@
     # Check hit access server repo
     tail -f /var/log/nginx/access.log
     ```
+
+# Configure RHEL 8.4 as a Server Repository
+
 
 # Reference
 - https://access.redhat.com/solutions/6913101
