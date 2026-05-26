@@ -1,3 +1,13 @@
+# List of contents
+- [List of contents](#list-of-contents)
+- [Configure Local DVD Repository for RHEL 8.4](#configure-local-dvd-repository-for-rhel-84)
+- [Configure RHEL 8.4 as a Server Repository](#configure-rhel-84-as-a-server-repository)
+  - [Provide CentOS stream 9 packages](#provide-centos-stream-9-packages)
+  - [Provide Ubuntu 20.04 LTS packages](#provide-ubuntu-2004-lts-packages)
+- [Setup CentOS stream 9 as a Client Repository](#setup-centos-stream-9-as-a-client-repository)
+- [Setup Ubuntu 20.04 LTS as a Client Repository](#setup-ubuntu-2004-lts-as-a-client-repository)
+- [Reference](#reference)
+
 # Configure Local DVD Repository for RHEL 8.4
 > This method to setup RHEL 8.4 as a server repository to collect some many or spesific packages from Ubuntu 20.04, RHEL 8.4, Centos Stream 9, and Centos Stream 8 repository.
 > ### Notes
@@ -200,7 +210,8 @@
    subscription-manager register --username rhel84 --password s3rv3rR3p0s1t0ry
    ```
 
-2. For example, I wanna provide **httpd** package for CentOS stream 9. Create repo file for CentOS stream 9 and disable main repository temporarily
+## Provide CentOS stream 9 packages
+1. For example, I wanna serving **httpd** package for CentOS stream 9. Create repo file for CentOS stream 9 and disable main repository temporarily
    ```bash
    cat << EOF > /etc/yum.repos.d/centos9.repo
    name=CentOS 9 BaseOS
@@ -238,21 +249,21 @@
    dnf download --resolve --alldeps docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
    ```
 
-3. Run command `createrepo` to creates a repomd (xml-based rpm metadata) repository from a set of rpms
+2. Run command `createrepo` to creates a repomd (xml-based rpm metadata) repository from a set of rpms
    ```bash
    createrepo /var/www/html/centos9/package
    ```
    > ### Notes
    > If you add some package, run this command again and add `--update` option
 
-4. Verifying **httpd** package and the dependencies downloaded. The result are several **.rpm** file
+3. Verifying **httpd** package and the dependencies downloaded. The result are several **.rpm** file
 
-5. Activate main repository and now disable centos9 repository
+4. Activate main repository and now disable centos9 repository
    ```bash
    mv /etc/yum.repos.d/local.repo.backup /etc/yum.repos.d/local.repo; mv /etc/yum.repos.d/centos9.repo /etc/yum.repos.d/centos9.repo.backup
    ```
 
-6. Add multiple line configuration for the CentOS stream 9 inside main repository
+5. Add multiple line configuration for the CentOS stream 9 inside main repository
    ```bash
    cat << EOF >> /etc/yum.repos.d/local.repo
 
@@ -266,7 +277,7 @@
    EOF
    ```
 
-7. Make sure if new repo for CentOS stream 9 ready to use
+6. Make sure if new repo for CentOS stream 9 ready to use
    ```bash
    dnf clean all; dnf repolist
    ```
@@ -280,6 +291,113 @@
    Date: Sat, 16 May 2026 06:34:34 GMT
    Content-Type: text/html
    Connection: keep-alive
+   ```
+
+## Provide Ubuntu 20.04 LTS packages
+1. There are different ways to serve packages into RHEL 8.4 server repository. Create pool and dists directory
+   > ### Notes
+   > pool: to store **.deb** packages
+   >
+   > dists: to store index metadata of packages
+   ```bash
+   cd /var/www/html/
+   mkdir -p ubuntu/pool/main/
+   mkdir -p ubuntu/dists/focal/main/binary-amd64/
+   ```
+
+2. Download index metadata of packages, I recommend to get inside **focal-updates** directory
+   ```bash
+   cd ubuntu/pool/main/
+   ```
+   ```bash
+   wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/universe/binary-amd64/Packages.gz
+   ```
+   or
+   ```bash
+   wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz
+   ```
+   ```bash
+   gunzip Packages.gz
+   ```
+   ```bash
+   grep -A 20 "Package: <name_package>" Packages | grep "Filename:" | awk '{print "https://archive.ubuntu.com/ubuntu/"$2}' > list_download.txt
+   ```
+   ```bash
+   wget -i list_download.txt
+   ```
+
+3. After that, generate below script to produce index metadata of packages
+   ```bash
+   cd /var/www/html/ubuntu
+   cat << EOF > index_gen.sh
+   #!/bin/bash
+
+   REPO_ROOT="/var/www/html/ubuntu"
+   POOL_DIR="$REPO_ROOT/pool/main"
+   OUTPUT_DIR="$REPO_ROOT/dists/focal/main/binary-amd64"
+   TEMP_PACKAGES="$OUTPUT_DIR/Packages"
+
+   > "$TEMP_PACKAGES"
+
+   echo "Start indexing repository..."
+
+   find "$POOL_DIR" -type f -name "*.deb" | while read -r FULL_PATH; do
+
+           deb=$(basename "$FULL_PATH")
+           echo "Processing $deb..." >&2
+
+           RELATIVE_PATH=${FULL_PATH#$REPO_ROOT/}
+           CONTROL_FILE=$(ar t "$FULL_PATH" | grep control)
+           ar x "$FULL_PATH" "$CONTROL_FILE"
+
+           if [[ "$CONTROL_FILE" == *.zst ]]; then
+                   zstdcat "$CONTROL_FILE" | tar -xOf - ./control >> "$TEMP_PACKAGES"
+           else
+                   tar -xOf "$CONTROL_FILE" ./control >> "$TEMP_PACKAGES"
+           fi
+
+           echo "Filename: $RELATIVE_PATH" >> "$TEMP_PACKAGES"
+           echo "Size: $(stat -c%s "$FULL_PATH")" >> "$TEMP_PACKAGES"
+           echo "MD5sum: $(md5sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
+           echo "SHA1: $(sha1sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
+           echo "SHA256: $(sha256sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
+           echo "" >> "$TEMP_PACKAGES"
+           rm -f "$CONTROL_FILE"
+
+   done
+
+   gzip -9c "$TEMP_PACKAGES" > "${TEMP_PACKAGES}.gz"
+
+   echo "-----------------------------------------------"
+   echo "Done! Index inside path $OUTPUT_DIR"
+   EOF
+   ```
+   ```bash
+   bash index_gen.sh
+   ```
+
+4. Update your local repo file
+   ```bash
+   cat << EOF >> /etc/yum.repos.d/local.repo
+
+   # Ubuntu Focal Repo
+   [focal-package]
+   name=Focal package
+   metadata_expire=-1
+   baseurl=file:///var/www/html/ubuntu/focal/package/
+   enabled=1
+   gpgcheck=0
+   EOF
+   ```
+   ```bash
+   dnf repolist 
+   ```
+   ```bash
+   # Expecting result
+   Updating Subscription Management
+   --- omitted ---
+   repo id                       repo name
+   focal-package                 Focal package
    ```
 
 # Setup CentOS stream 9 as a Client Repository
@@ -318,6 +436,42 @@
    ```
    ```bash
    dnf install <package_name> -y
+   ```
+
+# Setup Ubuntu 20.04 LTS as a Client Repository
+1. Change to superuser and configure new file repository
+   ```bash
+   sudo -i
+   ```
+   ```bash
+   cp /etc/apt/sources.list /etc/apt/sources.list.bck
+   cat << EOF > /etc/apt/sources.list
+   # local repo
+   deb [trusted=yes arch=amd64] http://<server repo ipv4>/ubuntu/ focal main
+   ```
+   ```bash
+   apt clean; rm -rf /var/lib/apt/lists/*; apt update -y
+   ```
+   ```bash
+   apt info <package_name>
+   ```
+   ```bash
+   # Expecting result
+   --- omitted ---
+   APT-Sources: http://<server repo ipv4>/ubuntu focal/main amd64 Packages
+   ```
+   ```bash
+   apt install <package_name> -y
+   ```
+   ```bash
+   # Expected result
+   apt list --installed | grep <package_name>
+   
+   WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+   
+   library/unknown,now 1.18.0-0ubuntu1.7 amd64 [installed,automatic]
+   <package_name>-common/unknown,now 1.18.0-0ubuntu1.7 all [installed,automatic]
+   <package_name>/unknown,now 1.18.0-0ubuntu1.7 all [installed]
    ```
 
 # Reference
