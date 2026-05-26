@@ -478,3 +478,9 @@
 - https://access.redhat.com/solutions/6913101
 - https://access.redhat.com/solutions/7019225
 - https://access.redhat.com/solutions/3418871
+- https://cloud.centos.org/centos/
+- https://vault.centos.org/
+- https://mirror.stream.centos.org/
+- https://unix.stackexchange.com/questions/780724/cant-install-rpm-packages-from-offline-mirror-no-available-modular-metadata
+- https://archive.ubuntu.com/ubuntu/pool/
+- https://archive.ubuntu.com/ubuntu/dists/
