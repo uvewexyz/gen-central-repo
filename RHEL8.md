@@ -325,20 +325,6 @@
 
 2. Download index metadata of packages, I recommend to get inside **focal-updates** directory
    ```bash
-   bash << EOF
-   cd ubuntu/pool/main/
-   # Use universe
-   wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/universe/binary-amd64/Packages.gz
-   gunzip Packages.gz
-   grep -A 20 "Package: <name_package>" Packages | grep "Filename:" | awk '{print "https://archive.ubuntu.com/ubuntu/"$2}' > list_download.txt
-   wget -i list_download.txt
-   EOF
-   ```
-   or Main
-   ```bash
-   wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz
-   ```
-   ```bash
    cat << EOF > installer.sh
    #!/bin/bash
 
