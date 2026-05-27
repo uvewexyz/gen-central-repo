@@ -26,48 +26,36 @@
 
 4. Mount the RHEL binary DVD iso to a directory such as `/mnt/iso`
    ```bash
+   bash << EOF
    mkdir /mnt/iso
-   ```
-   ```bash
    lsblk
-   ```
-
-   ```bash
-   # Output
-   NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT                                                                                                                
-   sr0            11:0    1  9.4G  0 rom
-   vda           252:0    0   25G  0 disk 
-   ├─vda1        252:1    0    1G  0 part /boot
-   └─vda2        252:2    0   24G  0 part 
-     ├─rhel-root 253:0    0 21.5G  0 lvm  /
-     └─rhel-swap 253:1    0  2.5G  0 lvm  [SWAP]
-   ```
-   ```bash
    mount /dev/sr0 /mnt/iso
+   EOF
    ```
    > ### Note
    > The Warning mount: /mnt/iso: WARNING: source write-protected, mounted read-only. is expected.
 
-5. Make sure you've installed the HTTP web server package, either httpd or nginx. I used nginx btw
+5. Make sure you've installed the HTTP web server, either httpd or nginx. I used nginx btw
    ```bash
+   bash << EOF
    dnf list --installed | grep nginx
-   ```
-   ```bash
+   systemctl enable --now nginx
    systemctl status nginx
+   EOF
    ```
 
-6. Configure to firewall to allow service https and http and also port 80 and 443
+6. Configure firewall to allow service **https** and **http** also port **80** and **443**
    ```bash
-   # Check state and default zone
-   firewall-cmd --state; firewall-cmd --get-default-zone
-   ```
-   ```bash
-   # List service in default zone, example public
-   firewall-cmd --list-all --zone=public 
-   ```
-   ```bash
-   # Add service and port into zone
-   firewall-cmd --add-service={http,https} --zone=public --permanent; firewall-cmd --add-port={80,443}/tcp --zone=public --permanent; firewall-cmd --reload; firewall-cmd --list-all --zone=public
+   # Check state of default zone, list current service, and add service and port into zone
+   bash << EOF
+   firewall-cmd --state
+   firewall-cmd --get-default-zone
+   firewall-cmd --list-all --zone=public
+   firewall-cmd --add-service={http,https} --zone=public --permanent
+   firewall-cmd --add-port={80,443}/tcp --zone=public --permanent
+   firewall-cmd --reload
+   firewall-cmd --list-all --zone=public
+   EOF
    ```
    ```bash
    # Expected output 
@@ -86,18 +74,29 @@
      rich rules: 
    ```
 
-7. Add port 80 and 443 into **http_port_t** object
+7. Add port 80 and 443 into **http_port_t** object selinux
    ```bash
-   semanage port -at http_port_t -p tcp 80; semanage port -at http_port_t -p tcp 443; semanage port -l | grep http_port_t
+   bash << EOF
+   semanage port -l | grep -w http_port_t
+   semanage port -at http_port_t -p tcp 80
+   semanage port -at http_port_t -p tcp 443
+   semanage port -l | grep -w http_port_t
+   EOF
    ```
 
-8. Then, add the **httpd_sys_content_t** object context for /var/www/html directory
+8. Then, add the **httpd_sys_content_t** object context for `/var/www/html` directory
    ```bash
-   semanage fcontext -a -t httpd_sys_content_t "/var/www/html(/.*)?"; restorecon -R -v /var/www/html; ls -Z /var/www/html
+   bash << EOF
+   semanage fcontext -l | grep -w httpd_sys_content_t | grep "www/html"
+   semanage fcontext -a -t httpd_sys_content_t "/var/www/html(/.*)?"
+   restorecon -Rv /var/www/html
+   ls -Z /var/www/html
+   EOF
    ```
 
-9.  Make sure the port and directory for displaying the repository packages are correct, such as the nginx configuration inside `/etc/nginx/nginx.conf`.
-    ```conf
+9.  Make sure the port and directory for displaying the repository packages are correct, verify the nginx configuration inside `/etc/nginx/nginx.conf`.
+    ```bash
+    # Go to this line
         server {
             listen       80 default_server;
             listen       [::]:80 default_server;
@@ -123,14 +122,14 @@
             }
     ```
 
-10. And also check state of nginx service
+10. Check state of nginx service
     ```bash
     systemctl status nginx
     ```
     > ### Note
     > Nginx service must active and enabled.
 
-11. Create the repository file with the correct path where the DVD or ISO is mounted. But, I will using `/var/www/html` as a local repository root path.
+11. Create the repository config file and pointing to the path of repository on web server. I using `/var/www/html` path as a local repository root path.
     > ### Note
     > Configure on your RHEL 8.4 VM
     ```bash
@@ -153,18 +152,22 @@
     EOF
     ```
 
-12. Copy content from RHEL 8.4 DVD ISO directory to `/var/www/html`
+12. Copy local packages from RHEL 8.4 DVD ISO directory to `/var/www/html`
     ```bash
     cp -avr /mnt/iso/ /var/www/html/
     ``` 
 
 13. Clear the cache and check whether you are able to get the packages from this DVD repository
     ```bash
-    dnf clean all; dnf repolist
+    bash << EOF
+    dnf clean all
+    dnf repolist
+    EOF
     ```
     ```bash
-    # Output
+    # Expected output
     Updating Subscription Management repositories.
+
     repo id                           repo name
     appstream                         AppStream Packages
     baseos                            BaseOS Packages
@@ -172,21 +175,24 @@
 
 14. Verify with update, download package, or go to local repo site
     ```bash
-    dnf update; dnf install <package-name>
-    ```
-    ```bash
+    bash << EOF
+    dnf update
+    dnf install <package-name>
     dnf info <package-name>
+    EOF
     ```
     ```bash
-    # Output
+    # Expected output
+
     --- omitted ---
-    From repo    : AppStream
+    From repo    : <your repo_id or repo_name>
     ```
     ```bash
     curl -I <server repository ipv4>
     ```
     ```bash
-    # Output
+    # Expected output
+
     HTTP/1.1 200 OK
     Server: nginx/1.14.1
     Date: Sat, 16 May 2026 06:34:34 GMT
@@ -194,7 +200,7 @@
     Connection: keep-alive
     ```
     ```bash
-    # Check hit access server repo
+    # Check the hit access to server repo
     tail -f /var/log/nginx/access.log
     ```
 
@@ -232,19 +238,22 @@
    gpgcheck=0
    EOF
    ```
-   ```bash
-   mv /etc/yum.repos.d/local.repo /etc/yum.repos.d/local.repo.backup
-   ```
-   ```bash
-   dnf clean all; dnf repolist; mkdir -p /var/www/html/centos9/package; cd /var/www/html/centos9/package
-   ```
    > ### Notes
    > Make sure only repo id **centos9-baseos** and **centos9-appstream** loaded
+
    ```bash
+   bash << EOF
+   mv /etc/yum.repos.d/local.repo /etc/yum.repos.d/local.repo.backup
+   dnf clean all
+   dnf repolist
+   mkdir -p /var/www/html/centos9/package
+   cd /var/www/html/centos9/package
    dnf download --resolve --alldeps httpd
+   EOF
    ```
+
    > ### Notes
-   > You also can download **docker** packages :v
+   > You can also download **docker** packages :v
    ```bash
    dnf download --resolve --alldeps docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
    ```
@@ -260,7 +269,10 @@
 
 4. Activate main repository and now disable centos9 repository
    ```bash
-   mv /etc/yum.repos.d/local.repo.backup /etc/yum.repos.d/local.repo; mv /etc/yum.repos.d/centos9.repo /etc/yum.repos.d/centos9.repo.backup
+   bash << EOF
+   mv /etc/yum.repos.d/local.repo.backup /etc/yum.repos.d/local.repo
+   mv /etc/yum.repos.d/centos9.repo /etc/yum.repos.d/centos9.repo.backup
+   EOF
    ```
 
 5. Add multiple line configuration for the CentOS stream 9 inside main repository
@@ -279,13 +291,17 @@
 
 6. Make sure if new repo for CentOS stream 9 ready to use
    ```bash
-   dnf clean all; dnf repolist
+   bash << EOF
+   dnf clean all
+   dnf repolist
+   EOF
    ```
    ```bash
    curl -I <server repository ipv4>
    ```
    ```bash
-   # Output
+   # Expected result
+
    HTTP/1.1 200 OK
    Server: nginx/1.14.1
    Date: Sat, 16 May 2026 06:34:34 GMT
@@ -294,36 +310,33 @@
    ```
 
 ## Provide Ubuntu 20.04 LTS packages
-1. There are different ways to serve packages into RHEL 8.4 server repository. Create pool and dists directory
+1. There are different ways to serve Ubuntu packages into RHEL 8.4 server repository. Create pool and dists directory
    > ### Notes
    > pool: to store **.deb** packages
    >
    > dists: to store index metadata of packages
    ```bash
+   bash << EOF
    cd /var/www/html/
    mkdir -p ubuntu/pool/main/
    mkdir -p ubuntu/dists/focal/main/binary-amd64/
+   EOF
    ```
 
 2. Download index metadata of packages, I recommend to get inside **focal-updates** directory
    ```bash
+   bash << EOF
    cd ubuntu/pool/main/
-   ```
-   ```bash
+   # Use universe
    wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/universe/binary-amd64/Packages.gz
+   gunzip Packages.gz
+   grep -A 20 "Package: <name_package>" Packages | grep "Filename:" | awk '{print "https://archive.ubuntu.com/ubuntu/"$2}' > list_download.txt
+   wget -i list_download.txt
+   EOF
    ```
-   or
+   or Main
    ```bash
    wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz
-   ```
-   ```bash
-   gunzip Packages.gz
-   ```
-   ```bash
-   grep -A 20 "Package: <name_package>" Packages | grep "Filename:" | awk '{print "https://archive.ubuntu.com/ubuntu/"$2}' > list_download.txt
-   ```
-   ```bash
-   wget -i list_download.txt
    ```
 
 3. After that, generate below script to produce index metadata of packages
@@ -393,7 +406,8 @@
    dnf repolist 
    ```
    ```bash
-   # Expecting result
+   # Expected result
+
    Updating Subscription Management
    --- omitted ---
    repo id                       repo name
@@ -406,7 +420,10 @@
    sudo -i
    ```
    ```bash
-   mv /etc/yum.repos.d/centos-addons.repo /etc/yum.repos.d/centos-addons.repo.backup; mv /etc/yum.repos.d/centos.repo /etc/yum.repos.d/centos.repo.backup
+   bash << EOF
+   mv /etc/yum.repos.d/centos-addons.repo /etc/yum.repos.d/centos-addons.repo.backup
+   mv /etc/yum.repos.d/centos.repo /etc/yum.repos.d/centos.repo.backup
+   EOF
    ```
    ```bash
    cat << EOF > /etc/yum.repos.d/local.repo
@@ -419,18 +436,26 @@
    EOF
    ```
    ```bash
-   dnf clean all; dnf repolist
+   bash << EOF
+   dnf clean all
+   dnf repolist
+   EOF
    ```
    ```bash
    # Expected result
+
    repo id                          repo name
    local-repo                       local repo rhel8
    ```
    ```bash
-   dnf update; dnf info <package_name>
+   bash << EOF
+   dnf update -y
+   dnf info <package_name>
+   EOF
    ```
    ```bash
    # Expected result
+
    --- omitted ---
    From repo    : local-repo
    ```
@@ -448,15 +473,19 @@
    cat << EOF > /etc/apt/sources.list
    # local repo
    deb [trusted=yes arch=amd64] http://<server repo ipv4>/ubuntu/ focal main
+   EOF
    ```
    ```bash
-   apt clean; rm -rf /var/lib/apt/lists/*; apt update -y
-   ```
-   ```bash
+   bash << EOF
+   apt clean
+   rm -rf /var/lib/apt/lists/*
+   apt update -y
    apt info <package_name>
+   EOF
    ```
    ```bash
-   # Expecting result
+   # Expected result
+
    --- omitted ---
    APT-Sources: http://<server repo ipv4>/ubuntu focal/main amd64 Packages
    ```
