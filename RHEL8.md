@@ -338,6 +338,72 @@
    ```bash
    wget https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz
    ```
+   ```bash
+   cat << EOF > installer.sh
+   #!/bin/bash
+
+   REPO_ROOT="/var/www/html/local-repo/ubuntu"
+   TEMP_DIR="/tmp/ubuntu-index"
+   mkdir -p "$TEMP_DIR"
+
+   echo "========================================================="
+   echo "      FOCAL PACKAGE DOWNLOADER FOR RHEL 8"
+   echo "========================================================="
+   read -p "Input the name package to download (example: nginx libpcre3): " -a PACKAGES
+
+   if [ ${#PACKAGES[@]} -eq 0 ]; then
+      echo "Error: Null input!"
+      exit 1
+   fi
+
+   echo "Check manifest from archive.ubuntu.com"
+   wget -qO "$TEMP_DIR/Packages_main.gz" "https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz"
+   wget -qO "$TEMP_DIR/Packages_universe.gz" "https://archive.ubuntu.com/ubuntu/dists/focal-updates/universe/binary-amd64/Packages.gz"
+
+   gunzip -f "$TEMP_DIR/Packages_main.gz"
+   gunzip -f "$TEMP_DIR/Packages_universe.gz"
+
+   for pkg in "${PACKAGES[@]}"; do
+      echo "---------------------------------------------------------"
+      echo "Searching: $pkg ..."
+
+      FOUND_ANY=false
+
+      FILENAME_MAIN=$(grep -A 20 -E "^Package: $pkg$" "$TEMP_DIR/Packages_main" | grep "^Filename:" | awk '{print $2}')
+
+      if [ -n "$FILENAME_MAIN" ]; then
+         echo "$pkg found in main path!"
+         DOWNLOAD_URL="https://archive.ubuntu.com/ubuntu/$FILENAME_MAIN"
+         TARGET_DIR="$REPO_ROOT/pool/main/$pkg"
+
+         mkdir -p "$TARGET_DIR"
+         wget -q --show-progress -P "$TARGET_DIR" "$DOWNLOAD_URL"
+         FOUND_ANY=true
+      fi
+
+      FILENAME_UNIV=$(grep -A 20 -E "^Package: $pkg$" "$TEMP_DIR/Packages_universe" | grep "^Filename:" | awk '{print $2}')
+    
+      if [ -n "$FILENAME_UNIV" ]; then
+         echo "$pkg found in universe path!"
+         DOWNLOAD_URL="https://archive.ubuntu.com/ubuntu/$FILENAME_UNIV"
+         TARGET_DIR="$REPO_ROOT/pool/main/$pkg"
+
+         mkdir -p "$TARGET_DIR"
+         wget -q --show-progress -P "$TARGET_DIR" "$DOWNLOAD_URL"
+         FOUND_ANY=true
+      fi
+
+      if [ "$FOUND_ANY" = false ]; then
+         echo "$pkg not found in source repo, please add new sources!"
+      fi
+
+   done
+
+   rm -rf "$TEMP_DIR"
+   echo "---------------------------------------------------------"
+   echo "Completed!"
+   EOF
+   ```
 
 3. After that, generate below script to produce index metadata of packages
    ```bash
