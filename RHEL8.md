@@ -323,122 +323,20 @@
    EOF
    ```
 
-2. Download index metadata of packages, I recommend to get inside **focal-updates** directory
+2. Run the **installer.sh** script to download index metadata files and **.deb** packages
    ```bash
-   cat << EOF > installer.sh
-   #!/bin/bash
-
-   REPO_ROOT="/var/www/html/local-repo/ubuntu"
-   TEMP_DIR="/tmp/ubuntu-index"
-   mkdir -p "$TEMP_DIR"
-
-   echo "========================================================="
-   echo "      FOCAL PACKAGE DOWNLOADER FOR RHEL 8"
-   echo "========================================================="
-   read -p "Input the name package to download (example: nginx libpcre3): " -a PACKAGES
-
-   if [ ${#PACKAGES[@]} -eq 0 ]; then
-      echo "Error: Null input!"
-      exit 1
-   fi
-
-   echo "Check manifest from archive.ubuntu.com"
-   wget -qO "$TEMP_DIR/Packages_main.gz" "https://archive.ubuntu.com/ubuntu/dists/focal-updates/main/binary-amd64/Packages.gz"
-   wget -qO "$TEMP_DIR/Packages_universe.gz" "https://archive.ubuntu.com/ubuntu/dists/focal-updates/universe/binary-amd64/Packages.gz"
-
-   gunzip -f "$TEMP_DIR/Packages_main.gz"
-   gunzip -f "$TEMP_DIR/Packages_universe.gz"
-
-   for pkg in "${PACKAGES[@]}"; do
-      echo "---------------------------------------------------------"
-      echo "Searching: $pkg ..."
-
-      FOUND_ANY=false
-
-      FILENAME_MAIN=$(grep -A 20 -E "^Package: $pkg$" "$TEMP_DIR/Packages_main" | grep "^Filename:" | awk '{print $2}')
-
-      if [ -n "$FILENAME_MAIN" ]; then
-         echo "$pkg found in main path!"
-         DOWNLOAD_URL="https://archive.ubuntu.com/ubuntu/$FILENAME_MAIN"
-         TARGET_DIR="$REPO_ROOT/pool/main/$pkg"
-
-         mkdir -p "$TARGET_DIR"
-         wget -q --show-progress -P "$TARGET_DIR" "$DOWNLOAD_URL"
-         FOUND_ANY=true
-      fi
-
-      FILENAME_UNIV=$(grep -A 20 -E "^Package: $pkg$" "$TEMP_DIR/Packages_universe" | grep "^Filename:" | awk '{print $2}')
-    
-      if [ -n "$FILENAME_UNIV" ]; then
-         echo "$pkg found in universe path!"
-         DOWNLOAD_URL="https://archive.ubuntu.com/ubuntu/$FILENAME_UNIV"
-         TARGET_DIR="$REPO_ROOT/pool/main/$pkg"
-
-         mkdir -p "$TARGET_DIR"
-         wget -q --show-progress -P "$TARGET_DIR" "$DOWNLOAD_URL"
-         FOUND_ANY=true
-      fi
-
-      if [ "$FOUND_ANY" = false ]; then
-         echo "$pkg not found in source repo, please add new sources!"
-      fi
-
-   done
-
-   rm -rf "$TEMP_DIR"
-   echo "---------------------------------------------------------"
-   echo "Completed!"
+   bash << EOF
+   chmod +x installer.sh
+   ./installer.sh
    EOF
    ```
 
-3. After that, generate below script to produce index metadata of packages
+3. After that, generate below script to recreate index metadata for downloaded packages
    ```bash
-   cd /var/www/html/ubuntu
-   cat << EOF > index_gen.sh
-   #!/bin/bash
-
-   REPO_ROOT="/var/www/html/ubuntu"
-   POOL_DIR="$REPO_ROOT/pool/main"
-   OUTPUT_DIR="$REPO_ROOT/dists/focal/main/binary-amd64"
-   TEMP_PACKAGES="$OUTPUT_DIR/Packages"
-
-   > "$TEMP_PACKAGES"
-
-   echo "Start indexing repository..."
-
-   find "$POOL_DIR" -type f -name "*.deb" | while read -r FULL_PATH; do
-
-           deb=$(basename "$FULL_PATH")
-           echo "Processing $deb..." >&2
-
-           RELATIVE_PATH=${FULL_PATH#$REPO_ROOT/}
-           CONTROL_FILE=$(ar t "$FULL_PATH" | grep control)
-           ar x "$FULL_PATH" "$CONTROL_FILE"
-
-           if [[ "$CONTROL_FILE" == *.zst ]]; then
-                   zstdcat "$CONTROL_FILE" | tar -xOf - ./control >> "$TEMP_PACKAGES"
-           else
-                   tar -xOf "$CONTROL_FILE" ./control >> "$TEMP_PACKAGES"
-           fi
-
-           echo "Filename: $RELATIVE_PATH" >> "$TEMP_PACKAGES"
-           echo "Size: $(stat -c%s "$FULL_PATH")" >> "$TEMP_PACKAGES"
-           echo "MD5sum: $(md5sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
-           echo "SHA1: $(sha1sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
-           echo "SHA256: $(sha256sum "$FULL_PATH" | cut -d' ' -f1)" >> "$TEMP_PACKAGES"
-           echo "" >> "$TEMP_PACKAGES"
-           rm -f "$CONTROL_FILE"
-
-   done
-
-   gzip -9c "$TEMP_PACKAGES" > "${TEMP_PACKAGES}.gz"
-
-   echo "-----------------------------------------------"
-   echo "Done! Index inside path $OUTPUT_DIR"
+   bash << EOF
+   chmod +x index_gen.sh
+   ./index_gen.sh
    EOF
-   ```
-   ```bash
-   bash index_gen.sh
    ```
 
 4. Update your local repo file
