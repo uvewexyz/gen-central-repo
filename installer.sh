@@ -26,7 +26,7 @@ if [ ${#PACKAGES[@]} -eq 0 ]; then
 fi
 
 # 2. Download package index
-echo -e "--> ${YELLOW}[CHANGED !]${NC}: Extracting all Focal manifests..."
+echo -e "--> ${YELLOW}[CHANGED !]${NC}: Downloading and extracting all Focal manifests..."
 for suite in "${SUITES[@]}"; do
 	for comp in "${COMPONENTS[@]}"; do
 		INDEX_PATH="$TEMP_DIR/${suite}_${comp}"
